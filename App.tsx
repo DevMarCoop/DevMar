@@ -1,5 +1,4 @@
-// import React from 'react';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -15,10 +14,6 @@ import { cadastrarCandidato } from "./services/candidatosService";
 
 
 const App: React.FC = () => {
-
-  useEffect(() => {
-    cadastrarCandidato();
-  }, []);
 
   return (
     <ThemeProvider>

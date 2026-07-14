@@ -10,19 +10,3 @@ export async function cadastrarCandidato(candidato: any) {
     console.log(error);
 
 }
-
-
-
-
-
-    // const { data, error } = await supabase
-    //     .from("candidatos")
-    //     .insert([candidato])
-    //     .select();
-
-    // if (error) {
-    //     console.error(error);
-    //     throw error;
-    // }
-
-    // return data;
