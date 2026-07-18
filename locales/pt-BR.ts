@@ -197,6 +197,8 @@ export const ptBR = {
       estadoPlaceholder: 'Selecione um estado',
       cidadeLabel: 'Cidade',
       cidadePlaceholder: 'Selecione uma cidade',
+      cidadeSelectStateFirst: 'Selecione um estado primeiro',
+      cidadeLoading: 'Carregando cidades...',
       generoLabel: 'Gênero',
       generoPlaceholder: 'Selecione',
       generoOutroLabel: 'Especifique seu gênero',
@@ -204,9 +206,10 @@ export const ptBR = {
       faixaEtariaPlaceholder: 'Selecione',
 
       // Etapa 2 - Área de Atuação
-      areaTecnologiaLabel: 'Área da tecnologia que mais te interessa',
-      areaTecnologiaPlaceholder: 'Selecione uma área',
-      metodologiasLabel: 'Você já trabalhou com metodologias ágeis?',
+      areaInteresseLabel: "Área de Interesse",
+      areaInteressePlaceholder: "Selecione sua área principal de interesse",
+      errorareaInteresse: "Por favor, selecione uma área de interesse.",
+      metodologiasLabel: 'Você já trabalhou com metodologias ágeis? Quais?',
       metodologiasPlaceholder: 'Selecione',
       situacaoLabel: 'Situação Profissional Atual',
       situacaoPlaceholder: 'Selecione',
@@ -248,18 +251,25 @@ export const ptBR = {
       faixaEtaria45a54: '45 a 54 anos',
       faixaEtaria55mais: '55 anos ou mais',
 
-      // Opções - Área da tecnologia
-      areaTecWeb: 'Desenvolvimento Web',
-      areaBackend: 'Back-end',
-      areaFrontend: 'Front-end',
-      areaMobile: 'Mobile',
-      areaDados: 'Dados',
-      areaIA: 'IA',
-      areaDevOps: 'DevOps',
-      areaSeguranca: 'Segurança',
-      areaCloud: 'Cloud',
-      areaInfra: 'Infraestrutura',
-      areaGames: 'Games',
+      // Opções - Área de Interesse
+      areaIntBackend: 'Desenvolvimento Backend',
+      areaIntFrontend: 'Desenvolvimento Frontend',
+      areaIntFullStack: 'Desenvolvimento Full Stack',
+      areaIntMobile: 'Desenvolvimento Mobile',
+      areaIntDataScience: 'Ciência de Dados',
+      areaIntDataEngineering: 'Engenharia de Dados',
+      areaIntAI: 'Inteligência Artificial / Machine Learning',
+      areaIntDevOps: 'DevOps',
+      areaIntCloud: 'Cloud Computing',
+      areaIntSecurity: 'Segurança da Informação',
+      areaIntInfra: 'Infraestrutura e Redes',
+      areaIntQA: 'QA / Testes de Software',
+      areaIntUX: 'UX/UI Design',
+      areaIntPM: 'Gestão de Projetos',
+      areaIntProduct: 'Product Management',
+      areaIntGames: 'Desenvolvimento de Jogos',
+      areaIntDB: 'Banco de Dados',
+      areaIntSupport: 'Suporte Técnico',
 
       // Opções - Metodologias
       metScrum: 'Scrum',
@@ -291,9 +301,11 @@ export const ptBR = {
       senEspecialista: 'Especialista',
 
       // Opções - Nível de Idiomas
+      nivelNulo: 'Nulo',
       nivelBasico: 'Básico',
       nivelIntermediario: 'Intermediário',
       nivelAvancado: 'Avançado',
+      nivelNativo: 'Nativo',
 
       // Tela de sucesso / Termo de Ciência
       successTitle: 'Próximos Passos e Termo de Ciência',

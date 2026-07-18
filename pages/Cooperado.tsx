@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, MapPin, Heart, Code, Briefcase, MessageSquare, Loader2, CheckCircle, XCircle, LinkIcon, Github } from 'lucide-react';
+import Select from 'react-select';
+import { User, Mail, Phone, MapPin, Heart, Code, Briefcase, MessageSquare, Loader2, CheckCircle, XCircle, LinkIcon, Github, ArrowRight, ArrowLeft } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import Button from '../components/Button';
 import ScrollReveal from '../components/ScrollReveal';
 import { useLanguage } from '../contexts/LanguageContext';
-import { submitCooperadoForm, CooperadoFormData } from '../services/candidatosService';
+import { submitCooperadoForm, CooperadoFormData, verificarDuplicidade } from '../services/candidatosService';
+
 
 const Cooperado: React.FC = () => {
-  const { t } = useLanguage();
+  const { t } = useLanguage()
   const [formState, setFormState] = useState<CooperadoFormData>({
     nome_completo: '',
     email: '',
@@ -19,10 +21,15 @@ const Cooperado: React.FC = () => {
     genero_outro: '',
     faixa_etaria: '',
     area_interesse: '',
-    area_outro: '',
     metodologia_agil: '',
-    nivel_profissional: '',
     situacao_atual: '',
+    situacao_outro: '',
+    formacao_academica: '',
+    formacao_outro: '',
+    nivel_profissional: '',
+    stack_principal: '',
+    nivel_ingles: '',
+    nivel_espanhol: '',
     linkedin: '',
     github: '',
     portfolio: '',
@@ -35,6 +42,12 @@ const Cooperado: React.FC = () => {
   const [submitError, setSubmitError] = useState<string>('');
   const [cidades, setCidades] = useState<string[]>([]);
   const [loadingCidades, setLoadingCidades] = useState(false);
+  const [showTermScreen, setShowTermScreen] = useState(false);
+  const [termAccepted, setTermAccepted] = useState(false);
+  const [step, setStep] = useState(0);
+  const [isValidatingStep, setIsValidatingStep] = useState(false);
+
+  const TOTAL_STEPS = 3;
 
   useEffect(() => {
     if (!formState.estado) {
@@ -47,30 +60,29 @@ const Cooperado: React.FC = () => {
       setCidades([]);
 
       try {
-        // Usa a sigla do estado diretamente (mais confiável que código numérico)
         const url = `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${formState.estado}/municipios`;
         const response = await fetch(url);
-        
+
         if (!response.ok) {
           throw new Error(`Erro na requisição: ${response.status}`);
         }
-        
+
         const dados = await response.json();
-        
+
         if (!Array.isArray(dados) || dados.length === 0) {
           throw new Error(`Nenhum dado retornado para ${formState.estado}`);
         }
-        
+
         const cidadesOrdenadas = dados
           .map((municipio: any) => municipio.nome)
           .sort((a: string, b: string) => a.localeCompare(b));
-        
+
         setCidades(cidadesOrdenadas);
         setFormState(prev => ({
           ...prev,
           cidade: ''
         }));
-        
+
       } catch (error) {
         console.error(`❌ Erro ao buscar cidades para ${formState.estado}:`, error);
         setCidades([]);
@@ -82,88 +94,204 @@ const Cooperado: React.FC = () => {
     carregarCidades();
   }, [formState.estado]);
 
-  const estados = [
+  // ================= CONFIGURAÇÃO DE OPÇÕES PARA OS SELECTS =================
+
+  const getSelectClassNames = (error?: string) => ({
+    control: (state: any) => `w-full px-4 py-2.5 rounded-lg bg-brand-bg border transition-all cursor-pointer text-brand-blue ${
+      error ? 'border-red-500' : 'border-brand-slate/20'
+    } ${state.isFocused ? 'border-brand-red bg-white ring-2 ring-brand-red/20' : ''}`,
+    menu: () => "bg-brand-bg mt-1 rounded-lg shadow-xl border border-brand-slate/20 z-50 overflow-hidden",
+    menuList: () => "bg-brand-bg",
+    option: (state: any) => `px-4 py-3 cursor-pointer transition-colors ${
+      state.isSelected 
+        ? 'bg-brand-red text-white' 
+        : state.isFocused 
+          ? 'bg-brand-slate/20 text-brand-blue' 
+          : 'text-brand-blue'
+    }`,
+    singleValue: () => "text-brand-blue",
+    placeholder: () => "text-gray-400 truncate",
+  });
+
+  const handleSelectChange = (fieldId: string) => (selectedOption: any) => {
+    setFormState(prev => ({
+      ...prev,
+      [fieldId]: selectedOption ? selectedOption.value : ''
+    }));
+    
+    if (errors[fieldId]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldId];
+        return newErrors;
+      });
+    }
+  };
+
+  const estadosOptions = [
     'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
     'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
     'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+  ].map(estado => ({ value: estado, label: estado }));
+
+  const cidadesOptions = cidades.map(cidade => ({ value: cidade, label: cidade }));
+
+  const generoOptions = [
+    { value: 'Masculino', label: t.cooperado.generoMasculino },
+    { value: 'Feminino', label: t.cooperado.generoFeminino },
+    { value: 'Não binário', label: t.cooperado.generoNaoBinario },
+    { value: 'Outro', label: t.cooperado.generoOutro }
+  ];
+
+  const faixaEtariaOptions = [
+    { value: '18-24', label: t.cooperado.faixaEtaria18a24 },
+    { value: '25-34', label: t.cooperado.faixaEtaria25a34 },
+    { value: '35-44', label: t.cooperado.faixaEtaria35a44 },
+    { value: '45-54', label: t.cooperado.faixaEtaria45a54 },
+    { value: '55+', label: t.cooperado.faixaEtaria55mais }
   ];
 
   const areaInteresse = [
-    'Desenvolvimento Backend',
-    'Desenvolvimento Frontend',
-    'Desenvolvimento Full Stack',
-    'Desenvolvimento Mobile',
-    'Ciência de Dados',
-    'Engenharia de Dados',
-    'Inteligência Artificial / Machine Learning',
-    'DevOps',
-    'Cloud Computing',
-    'Segurança da Informação',
-    'Infraestrutura e Redes',
-    'QA / Testes de Software',
-    'UX/UI Design',
-    'Gestão de Projetos',
-    'Product Management',
-    'Desenvolvimento de Jogos',
-    'Banco de Dados',
-    'Suporte Técnico',
-    'Outro'
+    { value: 'Desenvolvimento Backend', key: 'areaIntBackend' },
+    { value: 'Desenvolvimento Frontend', key: 'areaIntFrontend' },
+    { value: 'Desenvolvimento Full Stack', key: 'areaIntFullStack' },
+    { value: 'Desenvolvimento Mobile', key: 'areaIntMobile' },
+    { value: 'Ciência de Dados', key: 'areaIntDataScience' },
+    { value: 'Engenharia de Dados', key: 'areaIntDataEngineering' },
+    { value: 'Inteligência Artificial / Machine Learning', key: 'areaIntAI' },
+    { value: 'DevOps', key: 'areaIntDevOps' },
+    { value: 'Cloud Computing', key: 'areaIntCloud' },
+    { value: 'Segurança da Informação', key: 'areaIntSecurity' },
+    { value: 'Infraestrutura e Redes', key: 'areaIntInfra' },
+    { value: 'QA / Testes de Software', key: 'areaIntQA' },
+    { value: 'UX/UI Design', key: 'areaIntUX' },
+    { value: 'Gestão de Projetos', key: 'areaIntPM' },
+    { value: 'Product Management', key: 'areaIntProduct' },
+    { value: 'Desenvolvimento de Jogos', key: 'areaIntGames' },
+    { value: 'Banco de Dados', key: 'areaIntDB' },
+    { value: 'Suporte Técnico', key: 'areaIntSupport' }
   ];
+  
+  const areaInteresseOptions = areaInteresse.map(opt => ({
+    value: opt.value,
+    label: t.cooperado[opt.key]
+  }));
 
-  const validateForm = (): boolean => {
+  const metodologiasOptions = [
+    { value: 'Scrum', key: 'metScrum' },
+    { value: 'Kanban', key: 'metKanban' },
+    { value: 'Ambos', key: 'metAmbos' },
+    { value: 'Nenhum', key: 'metNenhum' },
+  ].map(opt => ({ value: opt.value, label: t.cooperado[opt.key] }));
+
+  const situacaoProfissionalOptions = [
+    { value: 'Empregado (CLT)', key: 'sitCLT' },
+    { value: 'Atuando como PJ / Freelancer', key: 'sitPJ' },
+    { value: 'Desempregado (em busca de oportunidades)', key: 'sitDesempregado' },
+    { value: 'Estudante (sem vínculo empregatício atual)', key: 'sitEstudante' },
+    { value: 'Servidor Público', key: 'sitServidor' },
+    { value: 'Outro', key: 'sitOutro' },
+  ].map(opt => ({ value: opt.value, label: t.cooperado[opt.key] }));
+
+  const formacaoAcademicaOptions = [
+    { value: 'Ensino Superior Completo na área de Tecnologia (Bacharelado, Licenciatura ou Tecnólogo)', key: 'formSupCompleto' },
+    { value: 'Ensino Superior Cursando na área de Tecnologia', key: 'formSupCursando' },
+    { value: 'Curso Técnico Completo na área de Tecnologia', key: 'formTecCompleto' },
+    { value: 'Curso Técnico Cursando na área de Tecnologia', key: 'formTecCursando' },
+    { value: 'Formação Superior Completa em outras áreas (em transição de carreira para TI)', key: 'formTransicao' },
+    { value: 'Estudante autodidata / Cursos livres e Bootcamps (sem formação acadêmica formal)', key: 'formAutodidata' },
+  ].map(opt => ({ value: opt.value, label: t.cooperado[opt.key] }));
+
+  const senioridadeOptions = [
+    { value: 'Trainee', key: 'senTrainee' },
+    { value: 'Júnior', key: 'senJunior' },
+    { value: 'Pleno', key: 'senPleno' },
+    { value: 'Sênior', key: 'senSenior' },
+    { value: 'Especialista', key: 'senEspecialista' },
+  ].map(opt => ({ value: opt.value, label: t.cooperado[opt.key] }));
+
+  const nivelIdiomaOptions = [
+    { value: 'Nulo', key: 'nivelNulo' },
+    { value: 'Básico', key: 'nivelBasico' },
+    { value: 'Intermediário', key: 'nivelIntermediario' },
+    { value: 'Avançado', key: 'nivelAvancado' },
+    { value: 'Nativo', key: 'nivelNativo' },
+  ].map(opt => ({ value: opt.value, label: t.cooperado[opt.key] }));
+
+  // ============================================================================
+
+  const stepTitles = [t.cooperado.stepPersonal, t.cooperado.stepWork, t.cooperado.stepTechnical];
+
+  const validateStep = (stepIndex: number): boolean => {
     const newErrors: { [key: string]: string } = {};
 
-    if (!formState.nome_completo || formState.nome_completo.trim().split(/\s+/).length < 2) {
-      newErrors.nome_completo = 'Por favor, informe seu nome completo';
-    }
-    if (!formState.email) {
-      newErrors.email = 'Email é obrigatório';
-    }
-    if (!formState.whatsapp) {
-      newErrors.whatsapp = 'WhatsApp é obrigatório';
-    }
-    if (!formState.estado) {
-      newErrors.estado = 'Estado é obrigatório';
-    }
-    if (!formState.cidade) {
-      newErrors.cidade = 'Cidade é obrigatória';
-    }
-    if (!formState.genero) {
-      newErrors.genero = 'Gênero é obrigatório';
-    }
-    if (formState.genero === 'Outro' && !formState.genero_outro) {
-      newErrors.genero_outro = 'Por favor, especifique o gênero';
-    }
-    if (!formState.faixa_etaria) {
-      newErrors.faixa_etaria = 'Faixa etária é obrigatória';
-    }
-    if (!formState.area_interesse) {
-      newErrors.area_interesse = 'Área de interesse é obrigatória';
-    }
-    if (formState.area_interesse === 'Outra' && !formState.area_outro) {
-      newErrors.area_outro = 'Por favor, especifique sua área de interesse';
-    }
-    if (!formState.metodologia_agil) {
-      newErrors.metodologia_agil = 'Por favor, selecione uma opção';
-    }
-    if (!formState.nivel_profissional) {
-      newErrors.nivel_profissional = 'Nível profissional é obrigatório';
-    }
-    if (!formState.situacao_atual) {
-      newErrors.situacao_atual = 'Situação atual é obrigatória';
+    if (stepIndex === 0) {
+      if (!formState.nome_completo || formState.nome_completo.trim().split(/\s+/).length < 2) {
+        newErrors.nome_completo = t.cooperado.errorNomeCompleto;
+      }
+      if (!formState.email) {
+        newErrors.email = t.cooperado.errorEmail;
+      }
+      if (!formState.whatsapp) {
+        newErrors.whatsapp = t.cooperado.errorWhatsapp;
+      }
+      if (!formState.estado) {
+        newErrors.estado = t.cooperado.errorEstado;
+      }
+      if (!formState.cidade) {
+        newErrors.cidade = t.cooperado.errorCidade;
+      }
+      if (!formState.genero) {
+        newErrors.genero = t.cooperado.errorGenero;
+      }
+      if (formState.genero === 'Outro' && !formState.genero_outro) {
+        newErrors.genero_outro = t.cooperado.errorGeneroOutro;
+      }
+      if (!formState.faixa_etaria) {
+        newErrors.faixa_etaria = t.cooperado.errorFaixaEtaria;
+      }
+    } else if (stepIndex === 1) {
+      if (!formState.area_interesse) {
+        newErrors.area_interesse = t.cooperado.errorareaInteresse;
+      }
+      if (!formState.metodologia_agil) {
+        newErrors.metodologia_agil = t.cooperado.errorMetodologias;
+      }
+      if (!formState.situacao_atual) {
+        newErrors.situacao_atual = t.cooperado.errorSituacao;
+      }
+      if (formState.situacao_atual === 'Outro' && !formState.situacao_outro) {
+        newErrors.situacao_outro = t.cooperado.errorSituacaoOutro;
+      }
+      if (!formState.formacao_academica) {
+        newErrors.formacao_academica = t.cooperado.errorFormacao;
+      }
+      if (!formState.nivel_profissional) {
+        newErrors.nivel_profissional = t.cooperado.errorSenioridade;
+      }
+    } else if (stepIndex === 2) {
+      if (!formState.stack_principal) {
+        newErrors.stack_principal = t.cooperado.errorStack;
+      }
+      if (!formState.nivel_ingles) {
+        newErrors.nivel_ingles = t.cooperado.errorIngles;
+      }
+      if (!formState.nivel_espanhol) {
+        newErrors.nivel_espanhol = t.cooperado.errorEspanhol;
+      }
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value } = e.target;
     setFormState(prev => ({
       ...prev,
       [id]: value
     }));
-    
+
     if (errors[id]) {
       setErrors(prev => {
         const newErrors = { ...prev };
@@ -171,7 +299,7 @@ const Cooperado: React.FC = () => {
         return newErrors;
       });
     }
-    
+
     if (id === 'email' && submitError) {
       setSubmitError('');
       setSubmitStatus('idle');
@@ -196,10 +324,60 @@ const Cooperado: React.FC = () => {
     }
   };
 
+  const handleNext = async () => {
+    if (validateStep(step)) {
+      if (step === 0) {
+        setIsValidatingStep(true);
+        try {
+          const { emailExists, whatsappExists } = await verificarDuplicidade(formState.email, formState.whatsapp);
+          
+          if (emailExists || whatsappExists) {
+            const newErrors = { ...errors };
+            if (emailExists) {
+              newErrors.email = 'Este email já está registrado. Use um email diferente.';
+            }
+            if (whatsappExists) {
+              newErrors.whatsapp = 'Este número já está registrado.';
+            }
+            setErrors(newErrors);
+            setIsValidatingStep(false);
+            return;
+          }
+        } catch (error) {
+          console.error("Erro ao validar duplicidade:", error);
+        }
+        setIsValidatingStep(false);
+      }
+
+      setStep(s => s + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
+    if (step < TOTAL_STEPS - 1) {
+      await handleNext();
+      return;
+    }
+
+    if (!validateStep(TOTAL_STEPS - 1)) {
+      return;
+    }
+
+    setShowTermScreen(true);
+    setTermAccepted(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBack = () => {
+    setStep(s => Math.max(0, s - 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleConfirmTerm = async () => {
+    if (!termAccepted) {
       return;
     }
 
@@ -209,6 +387,8 @@ const Cooperado: React.FC = () => {
     try {
       await submitCooperadoForm(formState);
       setSubmitStatus('success');
+      setShowTermScreen(false);
+      setStep(0);
       setFormState({
         nome_completo: '',
         email: '',
@@ -219,499 +399,720 @@ const Cooperado: React.FC = () => {
         genero_outro: '',
         faixa_etaria: '',
         area_interesse: '',
-        area_outro: '',
         metodologia_agil: '',
+        situacao_atual: '', 
+        formacao_academica: '',
+        formacao_outro: '',
         nivel_profissional: '',
-        situacao_atual: '',
+        stack_principal: '',
+        nivel_ingles: '',
+        nivel_espanhol: '',
         linkedin: '',
         github: '',
         portfolio: '',
         mensagem: '',
       });
-
-      setTimeout(() => setSubmitStatus('idle'), 5000);
     } catch (error) {
       console.error('Erro ao enviar:', error);
       const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro ao enviar o formulário.';
       setSubmitError(errorMessage);
       setSubmitStatus('error');
-      
-      // Adiciona highlight visual ao campo com erro
+
       if (errorMessage.includes('email')) {
-        setErrors(prev => ({
-          ...prev,
-          email: errorMessage
-        }));
+        setErrors(prev => ({ ...prev, email: errorMessage }));
       } else if (errorMessage.includes('WhatsApp') || errorMessage.includes('whatsapp')) {
-        setErrors(prev => ({
-          ...prev,
-          whatsapp: errorMessage
-        }));
+        setErrors(prev => ({ ...prev, whatsapp: errorMessage }));
       }
-      
+
       setTimeout(() => setSubmitStatus('idle'), 5000);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleResetForm = () => {
+    setSubmitStatus('idle');
+    setSubmitError('');
+    setShowTermScreen(false);
+    setTermAccepted(false);
+    setStep(0);
+  };
+
+  const handleBackToForm = () => {
+    setShowTermScreen(false);
+    setTermAccepted(false);
+  };
+
   return (
     <div className="w-full bg-brand-bg min-h-[calc(100vh-80px)]">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        
-        {/* Header */}
-        <div className="text-center mb-12">
-          <ScrollReveal>
-            <h1 className="text-4xl md:text-5xl font-display font-bold text-brand-blue mb-4">
-              {t.cooperado?.title || 'Quero ser Cooperado'}
-            </h1>
-            <p className="text-brand-slate text-lg max-w-2xl mx-auto">
-              {t.cooperado?.subtitle || 'Junte-se à DevMar e faça parte de uma cooperativa de tecnologia inovadora.'}
-            </p>
-          </ScrollReveal>
-        </div>
 
-        {/* Form */}
-        <ScrollReveal delay={0.2}>
-          <div className="bg-white p-8 md:p-10 rounded-2xl shadow-lg border-t-4 border-brand-red">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="bg-brand-red/10 p-3 rounded-lg">
-                <Heart className="h-6 w-6 text-brand-red" />
+        {submitStatus === 'success' ? (
+          <ScrollReveal>
+            <div className="space-y-8">
+              <div className="text-center mb-12">
+                <div className="flex justify-center mb-6">
+                  <div className="bg-green-100 p-4 rounded-full">
+                    <CheckCircle className="h-12 w-12 text-green-600" />
+                  </div>
+                </div>
+                <h1 className="text-4xl md:text-5xl font-display font-bold text-brand-blue mb-4">
+                  {t.cooperado.successTitle}
+                </h1>
+                <p className="text-brand-slate text-lg max-w-2xl mx-auto">
+                  {t.cooperado.nextStepsDesc}
+                </p>
               </div>
-              <h2 className="text-2xl font-display font-bold text-brand-blue">
-                {t.cooperado?.formTitle || 'Inscrição para Cooperado'}
-              </h2>
+
+              <div className="bg-white p-8 md:p-10 rounded-2xl shadow-lg border-t-4 border-brand-red space-y-6">
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-display font-bold text-brand-blue flex items-center gap-3">
+                    <Heart className="h-6 w-6 text-brand-red" />
+                    {t.cooperado.nextStepsTitle}
+                  </h2>
+                  <p className="text-brand-slate leading-relaxed">
+                    {t.cooperado.nextStepsDesc}
+                  </p>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-brand-slate/20">
+                  <h2 className="text-2xl font-display font-bold text-brand-blue flex items-center gap-3">
+                    <Code className="h-6 w-6 text-brand-red" />
+                    {t.cooperado.studyTitle}
+                  </h2>
+                  <p className="text-brand-slate leading-relaxed">
+                    {t.cooperado.studyDesc}
+                  </p>
+                  <ul className="space-y-3 ml-4">
+                    <li className="text-brand-slate flex gap-3">
+                      <span className="text-brand-red font-bold">•</span>
+                      <span>
+                        <a href="https://capacita.coop.br/cursos-whatsapp/fundamentos-do-cooperativismo" target="_blank" rel="noopener noreferrer" className="text-brand-red hover:text-brand-red/80 font-medium underline">
+                          {t.cooperado.course1}
+                        </a>
+                      </span>
+                    </li>
+                    <li className="text-brand-slate flex gap-3">
+                      <span className="text-brand-red font-bold">•</span>
+                      <span>
+                        <a href="https://capacita.coop.br/cursos-studion/cooperativismo-primeiras-licoes" target="_blank" rel="noopener noreferrer" className="text-brand-red hover:text-brand-red/80 font-medium underline">
+                          {t.cooperado.course2}
+                        </a>
+                      </span>
+                    </li>
+                  </ul>
+                  <p className="text-brand-slate leading-relaxed pt-2">
+                    {t.cooperado.studyTip}
+                  </p>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-brand-slate/20">
+                  <h2 className="text-2xl font-display font-bold text-brand-blue flex items-center gap-3">
+                    <MessageSquare className="h-6 w-6 text-brand-red" />
+                    {t.cooperado.termTitle}
+                  </h2>
+                  <div className="bg-brand-bg p-6 rounded-lg border border-brand-slate/20 space-y-3">
+                    <p className="text-brand-slate leading-relaxed">
+                      <span className="text-brand-red font-bold">*</span> {t.cooperado.termText1}
+                    </p>
+                    <p className="text-brand-slate leading-relaxed">
+                      {t.cooperado.termText2}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-brand-slate/20">
+                  <h3 className="text-lg font-display font-bold text-brand-blue flex items-center gap-3">
+                    <LinkIcon className="h-5 w-5 text-brand-red" />
+                    Links Úteis
+                  </h3>
+                  <div className="space-y-2">
+                    <a href="https://capacita.coop.br/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-brand-red hover:text-brand-red/80 font-medium underline">
+                      <LinkIcon className="h-4 w-4" /> capacita.coop.br
+                    </a>
+                    <a href="https://capacita.coop.br/cursos-whatsapp/fundamentos-do-cooperativismo" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-brand-red hover:text-brand-red/80 font-medium underline">
+                      <LinkIcon className="h-4 w-4" /> {t.cooperado.course1}
+                    </a>
+                    <a href="https://capacita.coop.br/cursos-studion/cooperativismo-primeiras-licoes" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-brand-red hover:text-brand-red/80 font-medium underline">
+                      <LinkIcon className="h-4 w-4" /> {t.cooperado.course2}
+                    </a>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-brand-slate/20">
+                  <Button type="button" variant="primary" className="w-full justify-center text-lg py-4" onClick={handleResetForm}>
+                    {t.cooperado.btnBack}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </ScrollReveal>
+        ) : showTermScreen ? (
+          <ScrollReveal>
+            <div className="space-y-8">
+              <div className="text-center mb-12">
+                <div className="flex justify-center mb-6">
+                  <div className="bg-blue-100 p-4 rounded-full">
+                    <MessageSquare className="h-12 w-12 text-blue-600" />
+                  </div>
+                </div>
+                <h1 className="text-4xl md:text-5xl font-display font-bold text-brand-blue mb-4">
+                  {t.cooperado.termTitle}
+                </h1>
+                <p className="text-brand-slate text-lg max-w-2xl mx-auto">
+                  Por favor, leia e aceite o termo abaixo para continuar com sua inscrição.
+                </p>
+              </div>
+
+              <div className="bg-white p-8 md:p-10 rounded-2xl shadow-lg border-t-4 border-brand-red space-y-6">
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-display font-bold text-brand-blue flex items-center gap-3">
+                    <Heart className="h-6 w-6 text-brand-red" />
+                    {t.cooperado.nextStepsTitle}
+                  </h2>
+                  <p className="text-brand-slate leading-relaxed">
+                    Na DEVMAR, não existem 'empregados' ou 'chefes', mas sim cooperados que atuam de forma horizontal como donos do próprio negócio.
+                  </p>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-brand-slate/20">
+                  <h2 className="text-2xl font-display font-bold text-brand-blue flex items-center gap-3">
+                    <Code className="h-6 w-6 text-brand-red" />
+                    {t.cooperado.studyTitle}
+                  </h2>
+                  <p className="text-brand-slate leading-relaxed">
+                    {t.cooperado.studyDesc}
+                  </p>
+                  <ul className="space-y-3 ml-4">
+                    <li className="text-brand-slate flex gap-3">
+                      <span className="text-brand-red font-bold">•</span>
+                      <span>
+                        <a href="https://capacita.coop.br/cursos-whatsapp/fundamentos-do-cooperativismo" target="_blank" rel="noopener noreferrer" className="text-brand-red hover:text-brand-red/80 font-medium underline">
+                          {t.cooperado.course1}
+                        </a>
+                      </span>
+                    </li>
+                    <li className="text-brand-slate flex gap-3">
+                      <span className="text-brand-red font-bold">•</span>
+                      <span>
+                        <a href="https://capacita.coop.br/cursos-studion/cooperativismo-primeiras-licoes" target="_blank" rel="noopener noreferrer" className="text-brand-red hover:text-brand-red/80 font-medium underline">
+                          {t.cooperado.course2}
+                        </a>
+                      </span>
+                    </li>
+                  </ul>
+                  <p className="text-brand-slate leading-relaxed pt-2">
+                    {t.cooperado.studyTip}
+                  </p>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-brand-slate/20">
+                  <h2 className="text-2xl font-display font-bold text-brand-blue flex items-center gap-3">
+                    <MessageSquare className="h-6 w-6 text-brand-red" />
+                    {t.cooperado.termTitle}
+                  </h2>
+                  <div className="space-y-4 bg-slate-900 p-6 rounded-lg border border-slate-700">
+                    <p className="text-white leading-relaxed">
+                      <span className="text-brand-red font-bold">*</span> {t.cooperado.termText1}
+                    </p>
+                    <p className="text-white leading-relaxed">
+                      {t.cooperado.termText2}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4 p-6 bg-slate-900 rounded-lg border border-slate-700 pt-6 border-t border-brand-slate/20">
+                  <input
+                    type="checkbox"
+                    id="termAcceptance"
+                    checked={termAccepted}
+                    onChange={(e) => setTermAccepted(e.target.checked)}
+                    className="w-6 h-6 mt-1 accent-brand-red cursor-pointer"
+                  />
+                  <label htmlFor="termAcceptance" className="text-white leading-relaxed cursor-pointer">
+                    <span className="font-semibold text-white">{t.cooperado.termAcceptLabel}</span>
+                    <p className="text-sm mt-2 text-gray-300">{t.cooperado.termAcceptDesc}</p>
+                  </label>
+                </div>
+
+                <div className="flex flex-col md:flex-row gap-4 pt-6 border-t border-brand-slate/20">
+                  <Button type="button" variant="secondary" className="w-full justify-center text-lg py-4" onClick={handleBackToForm}>
+                    {t.cooperado.btnBack}
+                  </Button>
+                  <Button type="button" variant="primary" className="w-full justify-center text-lg py-4" onClick={handleConfirmTerm} disabled={!termAccepted || isSubmitting}>
+                    {isSubmitting ? (
+                      <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> {t.cooperado.btnSending}</>
+                    ) : (
+                      <>{t.cooperado.btnConfirm}</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </ScrollReveal>
+        ) : (
+          <>
+            <div className="text-center mb-12">
+              <ScrollReveal>
+                <h1 className="text-4xl md:text-5xl font-display font-bold text-brand-blue mb-4">
+                  {t.cooperado?.title || 'Quero ser Cooperado'}
+                </h1>
+                <p className="text-brand-slate text-lg max-w-2xl mx-auto">
+                  {t.cooperado?.subtitle || 'Junte-se à DevMar e faça parte de uma cooperativa de tecnologia inovadora.'}
+                </p>
+              </ScrollReveal>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              
-              {/* Nome Completo */}
-              <div>
-                <label htmlFor="nome_completo" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                  <User className="h-4 w-4" />
-                  Nome Completo <span className="text-brand-red">*</span>
-                </label>
-                <input
-                  type="text"
-                  id="nome_completo"
-                  className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                    errors.nome_completo ? 'border-red-500' : 'border-brand-slate/20'
-                  } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
-                  placeholder="Seu nome completo"
-                  value={formState.nome_completo}
-                  onChange={handleChange}
-                />
-                {errors.nome_completo && (
-                  <p className="text-red-500 text-sm mt-1">{errors.nome_completo}</p>
-                )}
-              </div>
-
-              {/* Email e WhatsApp */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="email" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    <Mail className="h-4 w-4" />
-                    Email <span className="text-brand-red">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    id="email"
-                    className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                      errors.email ? 'border-red-500' : 'border-brand-slate/20'
-                    } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
-                    placeholder="seu@email.com"
-                    value={formState.email}
-                    onChange={handleChange}
-                  />
-                  {errors.email && (
-                    <p className="text-red-500 text-sm mt-1">{errors.email}</p>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor="whatsapp" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    <Phone className="h-4 w-4" />
-                    WhatsApp <span className="text-brand-red">*</span>
-                  </label>
-                  <div className={`rounded-lg border ${
-                    errors.whatsapp ? 'border-red-500' : 'border-brand-slate/20'
-                  } transition-all`}>
-                    <PhoneInput
-                      country={'br'}
-                      value={formState.whatsapp}
-                      onChange={handlePhoneChange}
-                      placeholder=""
-                      inputProps={{
-                        id: 'whatsapp',
-                        name: 'whatsapp',
-                        required: true
-                      }}
-                      containerClass="phone-input-container"
-                      inputClass="w-full text-brand-blue"
-                      buttonClass="phone-input-button"
-                      dropdownClass="phone-input-dropdown"
-                    />
+            <ScrollReveal delay={0.2}>
+              <div className="bg-white p-8 md:p-10 rounded-2xl shadow-lg border-t-4 border-brand-red">
+                <div className="mb-8">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-brand-red">
+                      {t.cooperado.stepIndicator.replace('{current}', String(step + 1)).replace('{total}', String(TOTAL_STEPS))}
+                    </span>
+                    <span className="text-sm font-medium text-brand-slate">{stepTitles[step]}</span>
                   </div>
-                  {errors.whatsapp && (
-                    <p className="text-red-500 text-sm mt-1">{errors.whatsapp}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Estado e Cidade */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="estado" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    <MapPin className="h-4 w-4" />
-                    Estado <span className="text-brand-red">*</span>
-                  </label>
-                  <select
-                    id="estado"
-                    className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                      errors.estado ? 'border-red-500' : 'border-brand-slate/20'
-                    } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue appearance-none cursor-pointer`}
-                    value={formState.estado}
-                    onChange={handleChange}
-                  >
-                    <option value="">Selecione um estado</option>
-                    {estados.map(estado => (
-                      <option key={estado} value={estado}>{estado}</option>
+                  <div className="flex space-x-2">
+                    {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`flex-1 h-2 rounded-full transition-colors ${i <= step ? 'bg-brand-red' : 'bg-brand-slate/20'}`}
+                      />
                     ))}
-                  </select>
-                  {errors.estado && (
-                    <p className="text-red-500 text-sm mt-1">{errors.estado}</p>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor="cidade" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    <MapPin className="h-4 w-4" />
-                    Cidade <span className="text-brand-red">*</span>
-                  </label>
-                  <select
-                    id="cidade"
-                    className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                      errors.cidade ? 'border-red-500' : 'border-brand-slate/20'
-                    } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue appearance-none cursor-pointer ${
-                      !formState.estado ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                    value={formState.cidade}
-                    onChange={handleChange}
-                    disabled={!formState.estado || loadingCidades}
-                  >
-                    <option value="" disabled hidden>{
-                      !formState.estado ? 'Selecione um estado primeiro' : loadingCidades ? 'Carregando cidades...' : 'Selecione uma cidade'
-                    }</option>
-                    {cidades.map(cidade => (
-                      <option key={cidade} value={cidade}>{cidade}</option>
-                    ))}
-                  </select>
-                  {errors.cidade && (
-                    <p className="text-red-500 text-sm mt-1">{errors.cidade}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Gênero */}
-              <div>
-                <label htmlFor="genero" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                  <Heart className="h-4 w-4" />
-                  Gênero <span className="text-brand-red">*</span>
-                </label>
-                <select
-                  id="genero"
-                  className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                    errors.genero ? 'border-red-500' : 'border-brand-slate/20'
-                  } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue appearance-none cursor-pointer`}
-                  value={formState.genero}
-                  onChange={handleChange}
-                >
-                  <option value="" disabled hidden>Selecione</option>
-                  <option value="Masculino">Masculino</option>
-                  <option value="Feminino">Feminino</option>
-                  <option value="Não binário">Não binário</option>
-                  <option value="Outro">Outro</option>
-                </select>
-                {errors.genero && (
-                  <p className="text-red-500 text-sm mt-1">{errors.genero}</p>
-                )}
-              </div>
-
-              {/* Gênero Outro (condicional) */}
-              {formState.genero === 'Outro' && (
-                <div>
-                  <label htmlFor="genero_outro" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    Especifique <span className="text-brand-red">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="genero_outro"
-                    className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                      errors.genero_outro ? 'border-red-500' : 'border-brand-slate/20'
-                    } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
-                    placeholder="Especifique seu gênero"
-                    value={formState.genero_outro || ''}
-                    onChange={handleChange}
-                  />
-                  {errors.genero_outro && (
-                    <p className="text-red-500 text-sm mt-1">{errors.genero_outro}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Faixa Etária */}
-              <div>
-                <label htmlFor="faixa_etaria" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                  Faixa Etária <span className="text-brand-red">*</span>
-                </label>
-                <select
-                  id="faixa_etaria"
-                  className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                    errors.faixa_etaria ? 'border-red-500' : 'border-brand-slate/20'
-                  } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue appearance-none cursor-pointer`}
-                  value={formState.faixa_etaria}
-                  onChange={handleChange}
-                >
-                  <option value="" disabled hidden>Selecione</option>
-                  <option value="18-24">18 - 24 anos</option>
-                  <option value="25-34">25 - 34 anos</option>
-                  <option value="35-44">35 - 44 anos</option>
-                  <option value="45-54">45 - 54 anos</option>
-                  <option value="55+">55+ anos</option>
-                </select>
-                {errors.faixa_etaria && (
-                  <p className="text-red-500 text-sm mt-1">{errors.faixa_etaria}</p>
-                )}
-              </div>
-
-              {/* Área de Interesse */}
-              <div>
-                <label htmlFor="area_interesse" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                  <Code className="h-4 w-4" />
-                  Área de Interesse <span className="text-brand-red">*</span>
-                </label>
-                <select
-                  id="area_interesse"
-                  className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                    errors.area_interesse ? 'border-red-500' : 'border-brand-slate/20'
-                  } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue appearance-none cursor-pointer`}
-                  value={formState.area_interesse}
-                  onChange={handleChange}
-                >
-                  <option value="" disabled hidden>Selecione uma área</option>
-                  {areaInteresse.map(area => (
-                    <option key={area} value={area}>{area}</option>
-                  ))}
-                </select>
-                {errors.area_interesse && (
-                  <p className="text-red-500 text-sm mt-1">{errors.area_interesse}</p>
-                )}
-              </div>
-
-              {/* Área Outro (condicional) */}
-              {formState.area_interesse === 'Outro' && (
-                <div>
-                  <label htmlFor="area_outro" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    Qual? <span className="text-brand-red">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="area_outro"
-                    className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                      errors.area_outro ? 'border-red-500' : 'border-brand-slate/20'
-                    } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
-                    placeholder="Especifique sua área de interesse"
-                    value={formState.area_outro || ''}
-                    onChange={handleChange}
-                  />
-                  {errors.area_outro && (
-                    <p className="text-red-500 text-sm mt-1">{errors.area_outro}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Metodologia Ágil */}
-              <div>
-                <label htmlFor="metodologia_agil" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                  <Briefcase className="h-4 w-4" />
-                  Você possui experiência com metodologias ágeis? <span className="text-brand-red">*</span>
-                </label>
-                <select
-                  id="metodologia_agil"
-                  className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                    errors.metodologia_agil ? 'border-red-500' : 'border-brand-slate/20'
-                  } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue appearance-none cursor-pointer`}
-                  value={formState.metodologia_agil}
-                  onChange={handleChange}
-                >
-                  <option value="" disabled hidden>Selecione</option>
-                  <option value="Scrum">Scrum</option>
-                  <option value="Kanban">Kanban</option>
-                  <option value="Scrum e Kanban">Scrum e Kanban</option>
-                  <option value="Outras metodologias">Outras metodologias</option>
-                  <option value="Ainda não possuo experiência">Ainda não possuo experiência</option>
-                </select>
-                {errors.metodologia_agil && (
-                  <p className="text-red-500 text-sm mt-1">{errors.metodologia_agil}</p>
-                )}
-              </div>
-
-              {/* Nível Profissional */}
-              <div>
-                <label htmlFor="nivel_profissional" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                  <Briefcase className="h-4 w-4" />
-                  Nível Profissional <span className="text-brand-red">*</span>
-                </label>
-                <select
-                  id="nivel_profissional"
-                  className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                    errors.nivel_profissional ? 'border-red-500' : 'border-brand-slate/20'
-                  } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue appearance-none cursor-pointer`}
-                  value={formState.nivel_profissional}
-                  onChange={handleChange}
-                >
-                  <option value="" disabled hidden>Selecione</option>
-                  <option value="Estudante">Estudante</option>
-                  <option value="Estagiário(a)">Estagiário(a)</option>
-                  <option value="Júnior">Trainee</option>
-                  <option value="Júnior">Júnior</option>
-                  <option value="Pleno">Pleno</option>
-                  <option value="Sênior">Sênior</option>
-                  <option value="Especialista">Especialista</option>
-                  <option value="Tech Lead">Tech Lead</option>
-                  <option value="Gestor(a)">Gestor(a)</option>
-                </select>
-                {errors.nivel_profissional && (
-                  <p className="text-red-500 text-sm mt-1">{errors.nivel_profissional}</p>
-                )}
-              </div>
-
-              {/* Situação Atual */}
-              <div>
-                <label htmlFor="situacao_atual" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                  Atualmente você está <span className="text-brand-red">*</span>
-                </label>
-                <select
-                  id="situacao_atual"
-                  className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${
-                    errors.situacao_atual ? 'border-red-500' : 'border-brand-slate/20'
-                  } focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue appearance-none cursor-pointer`}
-                  value={formState.situacao_atual}
-                  onChange={handleChange}
-                >
-                  <option value="" disabled hidden>Selecione</option>
-                  <option value="Empregado(a)">Empregado(a)</option>
-                  <option value="Freelancer">Freelancer</option>
-                  <option value="Procurando oportunidade">Procurando oportunidade</option>
-                  <option value="Estudando">Estudando</option>
-                  <option value="Outro">Outro</option>
-                </select>
-                {errors.situacao_atual && (
-                  <p className="text-red-500 text-sm mt-1">{errors.situacao_atual}</p>
-                )}
-              </div>
-
-              {/* Redes Sociais e Portfolio */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label htmlFor="linkedin" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    <LinkIcon className="h-4 w-4" />
-                    LinkedIn <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="linkedin"
-                    className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue"
-                    placeholder="seu-linkedin"
-                    value={formState.linkedin || ''}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="github" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    <Github className="h-4 w-4" />
-                    GitHub <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="github"
-                    className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue"
-                    placeholder="seu-github"
-                    value={formState.github || ''}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="portfolio" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                    <LinkIcon className="h-4 w-4" />
-                    Portfolio <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="portfolio"
-                    className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue"
-                    placeholder="seu-portfolio.com"
-                    value={formState.portfolio || ''}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-
-              {/* Mensagem Adicional */}
-              <div>
-                <label htmlFor="mensagem" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
-                  <MessageSquare className="h-4 w-4" />
-                  Mensagem Adicional <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
-                </label>
-                <textarea
-                  id="mensagem"
-                  rows={4}
-                  className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue resize-none"
-                  placeholder="Conte-nos mais sobre você, suas experiências e por que quer fazer parte da DevMar..."
-                  value={formState.mensagem || ''}
-                  onChange={handleChange}
-                ></textarea>
-              </div>
-
-              {/* Mensagem de Status */}
-              {submitStatus === 'success' && (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                  <p>Formulário enviado com sucesso! Entraremos em contato em breve.</p>
-                </div>
-              )}
-              
-              {submitStatus === 'error' && submitError && (
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 border border-red-300 text-red-800">
-                  <XCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium">Erro ao enviar formulário</p>
-                    <p className="text-sm mt-1">{submitError}</p>
                   </div>
                 </div>
-              )}
 
-              {/* Botão de Envio */}
-              <div className="pt-4">
-                <Button 
-                  type="submit" 
-                  variant="primary" 
-                  className="w-full justify-center text-lg py-4"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* ===================== ETAPA 1 ===================== */}
+                  {step === 0 && (
                     <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Enviando...
-                    </>
-                  ) : (
-                    <>
-                      Enviar Inscrição
+                      <div>
+                        <label htmlFor="nome_completo" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <User className="h-4 w-4" />
+                          {t.cooperado.nameLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          id="nome_completo"
+                          className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${errors.nome_completo ? 'border-red-500' : 'border-brand-slate/20'} focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
+                          placeholder={t.cooperado.namePlaceholder}
+                          value={formState.nome_completo}
+                          onChange={handleChange}
+                        />
+                        {errors.nome_completo && <p className="text-red-500 text-sm mt-1">{errors.nome_completo}</p>}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label htmlFor="email" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                            <Mail className="h-4 w-4" />
+                            {t.cooperado.emailLabel} <span className="text-brand-red">*</span>
+                          </label>
+                          <input
+                            type="email"
+                            id="email"
+                            className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${errors.email ? 'border-red-500' : 'border-brand-slate/20'} focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
+                            placeholder={t.cooperado.emailPlaceholder}
+                            value={formState.email}
+                            onChange={handleChange}
+                          />
+                          {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+                        </div>
+                        <div>
+                          <label htmlFor="whatsapp" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                            <Phone className="h-4 w-4" />
+                            {t.cooperado.whatsappLabel} <span className="text-brand-red">*</span>
+                          </label>
+                          <div className={`rounded-lg border ${errors.whatsapp ? 'border-red-500' : 'border-brand-slate/20'} transition-all`}>
+                            <PhoneInput
+                              country={'br'}
+                              value={formState.whatsapp}
+                              onChange={handlePhoneChange}
+                              placeholder=""
+                              inputProps={{ id: 'whatsapp', name: 'whatsapp', required: true }}
+                              containerClass="phone-input-container"
+                              inputClass="w-full text-brand-blue"
+                              buttonClass="phone-input-button"
+                              dropdownClass="phone-input-dropdown"
+                            />
+                          </div>
+                          {errors.whatsapp && <p className="text-red-500 text-sm mt-1">{errors.whatsapp}</p>}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label htmlFor="estado" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                            <MapPin className="h-4 w-4" />
+                            {t.cooperado.estadoLabel} <span className="text-brand-red">*</span>
+                          </label>
+                          <Select
+                            id="estado"
+                            options={estadosOptions}
+                            value={estadosOptions.find(opt => opt.value === formState.estado) || null}
+                            placeholder={t.cooperado.estadoPlaceholder}
+                            maxMenuHeight={220}
+                            unstyled
+                            onChange={handleSelectChange('estado')}
+                            classNames={getSelectClassNames(errors.estado)}
+                          />
+                          {errors.estado && <p className="text-red-500 text-sm mt-1">{errors.estado}</p>}
+                        </div>
+                        <div>
+                          <label htmlFor="cidade" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                            <MapPin className="h-4 w-4" />
+                            {t.cooperado.cidadeLabel} <span className="text-brand-red">*</span>
+                          </label>
+                          <Select
+                            id="cidade"
+                            options={cidadesOptions}
+                            value={cidadesOptions.find(opt => opt.value === formState.cidade) || null}
+                            placeholder={!formState.estado ? t.cooperado.cidadeSelectStateFirst : loadingCidades ? t.cooperado.cidadeLoading : t.cooperado.cidadePlaceholder}
+                            maxMenuHeight={220}
+                            unstyled
+                            isDisabled={!formState.estado || loadingCidades}
+                            onChange={handleSelectChange('cidade')}
+                            classNames={getSelectClassNames(errors.cidade)}
+                          />
+                          {errors.cidade && <p className="text-red-500 text-sm mt-1">{errors.cidade}</p>}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="genero" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Heart className="h-4 w-4" />
+                          {t.cooperado.generoLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <Select
+                          id="genero"
+                          options={generoOptions}
+                          value={generoOptions.find(opt => opt.value === formState.genero) || null}
+                          placeholder={t.cooperado.generoPlaceholder}
+                          maxMenuHeight={220}
+                          unstyled
+                          onChange={handleSelectChange('genero')}
+                          classNames={getSelectClassNames(errors.genero)}
+                        />
+                        {errors.genero && <p className="text-red-500 text-sm mt-1">{errors.genero}</p>}
+                      </div>
+
+                      {formState.genero === 'Outro' && (
+                        <div>
+                          <label htmlFor="genero_outro" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                            {t.cooperado.generoOutroLabel} <span className="text-brand-red">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            id="genero_outro"
+                            className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${errors.genero_outro ? 'border-red-500' : 'border-brand-slate/20'} focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
+                            placeholder={t.cooperado.generoOutroLabel}
+                            value={formState.genero_outro || ''}
+                            onChange={handleChange}
+                          />
+                          {errors.genero_outro && <p className="text-red-500 text-sm mt-1">{errors.genero_outro}</p>}
+                        </div>
+                      )}
+
+                      <div>
+                        <label htmlFor="faixa_etaria" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          {t.cooperado.faixaEtariaLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <Select
+                          id="faixa_etaria"
+                          options={faixaEtariaOptions}
+                          value={faixaEtariaOptions.find(opt => opt.value === formState.faixa_etaria) || null}
+                          placeholder={t.cooperado.faixaEtariaPlaceholder}
+                          maxMenuHeight={220}
+                          unstyled
+                          onChange={handleSelectChange('faixa_etaria')}
+                          classNames={getSelectClassNames(errors.faixa_etaria)}
+                        />
+                        {errors.faixa_etaria && <p className="text-red-500 text-sm mt-1">{errors.faixa_etaria}</p>}
+                      </div>
                     </>
                   )}
-                </Button>
+
+                  {/* ===================== ETAPA 2 ===================== */}
+                  {step === 1 && (
+                    <>
+                      <div>
+                        <label htmlFor="area_interesse" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Code className="h-4 w-4" />
+                          {t.cooperado.areaInteresseLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <Select
+                          id="area_interesse"
+                          options={areaInteresseOptions}
+                          value={areaInteresseOptions.find(opt => opt.value === formState.area_interesse) || null}
+                          placeholder={t.cooperado.areaInteressePlaceholder}
+                          maxMenuHeight={220}
+                          unstyled
+                          onChange={handleSelectChange('area_interesse')}
+                          classNames={getSelectClassNames(errors.area_interesse)}
+                        />
+                        {errors.area_interesse && <p className="text-red-500 text-sm mt-1">{errors.area_interesse}</p>}
+                      </div>
+
+                      <div>
+                        <label htmlFor="metodologia_agil" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Briefcase className="h-4 w-4" />
+                          {t.cooperado.metodologiasLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <Select
+                          id="metodologia_agil"
+                          options={metodologiasOptions}
+                          value={metodologiasOptions.find(opt => opt.value === formState.metodologia_agil) || null}
+                          placeholder={t.cooperado.metodologiasPlaceholder}
+                          maxMenuHeight={220}
+                          unstyled
+                          onChange={handleSelectChange('metodologia_agil')}
+                          classNames={getSelectClassNames(errors.metodologia_agil)}
+                        />
+                        {errors.metodologia_agil && <p className="text-red-500 text-sm mt-1">{errors.metodologia_agil}</p>}
+                      </div>
+
+                      <div>
+                        <label htmlFor="situacao_atual" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Briefcase className="h-4 w-4" />
+                          {t.cooperado.situacaoLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <Select
+                          id="situacao_atual"
+                          options={situacaoProfissionalOptions}
+                          value={situacaoProfissionalOptions.find(opt => opt.value === formState.situacao_atual) || null}
+                          placeholder={t.cooperado.situacaoPlaceholder}
+                          maxMenuHeight={220}
+                          unstyled
+                          onChange={handleSelectChange('situacao_atual')}
+                          classNames={getSelectClassNames(errors.situacao_atual)}
+                        />
+                        {errors.situacao_atual && <p className="text-red-500 text-sm mt-1">{errors.situacao_atual}</p>}
+                      </div>
+
+                      {formState.situacao_atual === 'Outro' && (
+                        <div>
+                          <label htmlFor="situacao_outro" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                            {t.cooperado.situacaoOutroLabel} <span className="text-brand-red">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            id="situacao_outro"
+                            className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${errors.situacao_outro ? 'border-red-500' : 'border-brand-slate/20'} focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
+                            placeholder={t.cooperado.situacaoOutroLabel}
+                            value={formState.situacao_outro || ''}
+                            onChange={handleChange}
+                          />
+                          {errors.situacao_outro && <p className="text-red-500 text-sm mt-1">{errors.situacao_outro}</p>}
+                        </div>
+                      )}
+
+                      <div>
+                        <label htmlFor="formacao_academica" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Code className="h-4 w-4" />
+                          {t.cooperado.formacaoLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <Select
+                          id="formacao_academica"
+                          options={formacaoAcademicaOptions}
+                          value={formacaoAcademicaOptions.find(opt => opt.value === formState.formacao_academica) || null}
+                          placeholder={t.cooperado.formacaoPlaceholder}
+                          maxMenuHeight={220}
+                          unstyled
+                          onChange={handleSelectChange('formacao_academica')}
+                          classNames={getSelectClassNames(errors.formacao_academica)}
+                        />
+                        {errors.formacao_academica && <p className="text-red-500 text-sm mt-1">{errors.formacao_academica}</p>}
+                      </div>
+
+                      <div>
+                        <label htmlFor="formacao_outro" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Code className="h-4 w-4" />
+                          {t.cooperado.outrasFormacoesLabel} <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          id="formacao_outro"
+                          className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue"
+                          placeholder={t.cooperado.outrasFormacoesPlaceholder}
+                          value={formState.formacao_outro || ''}
+                          onChange={handleChange}
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="nivel_profissional" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Briefcase className="h-4 w-4" />
+                          {t.cooperado.senioridadeLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <Select
+                          id="nivel_profissional"
+                          options={senioridadeOptions}
+                          value={senioridadeOptions.find(opt => opt.value === formState.nivel_profissional) || null}
+                          placeholder={t.cooperado.senioridadePlaceholder}
+                          maxMenuHeight={220}
+                          unstyled
+                          onChange={handleSelectChange('nivel_profissional')}
+                          classNames={getSelectClassNames(errors.nivel_profissional)}
+                        />
+                        {errors.nivel_profissional && <p className="text-red-500 text-sm mt-1">{errors.nivel_profissional}</p>}
+                      </div>
+                    </>
+                  )}
+
+                  {/* ===================== ETAPA 3 ===================== */}
+                  {step === 2 && (
+                    <>
+                      <div>
+                        <label htmlFor="stack_principal" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Code className="h-4 w-4" />
+                          {t.cooperado.stackLabel} <span className="text-brand-red">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          id="stack_principal"
+                          className={`w-full px-4 py-3 rounded-lg bg-brand-bg border ${errors.stack_principal ? 'border-red-500' : 'border-brand-slate/20'} focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue`}
+                          placeholder={t.cooperado.stackPlaceholder}
+                          value={formState.stack_principal}
+                          onChange={handleChange}
+                        />
+                        {errors.stack_principal && <p className="text-red-500 text-sm mt-1">{errors.stack_principal}</p>}
+                      </div>
+
+                      <div>
+                        <span className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <MessageSquare className="h-4 w-4" />
+                          {t.cooperado.idiomasLabel} <span className="text-brand-red">*</span>
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label htmlFor="nivel_ingles" className="block text-xs font-medium text-brand-slate mb-1">
+                              {t.cooperado.inglesLabel}
+                            </label>
+                            <Select
+                              id="nivel_ingles"
+                              options={nivelIdiomaOptions}
+                              value={nivelIdiomaOptions.find(opt => opt.value === formState.nivel_ingles) || null}
+                              placeholder={t.cooperado.idiomasPlaceholder}
+                              maxMenuHeight={220}
+                              unstyled
+                              onChange={handleSelectChange('nivel_ingles')}
+                              classNames={getSelectClassNames(errors.nivel_ingles)}
+                            />
+                            {errors.nivel_ingles && <p className="text-red-500 text-sm mt-1">{errors.nivel_ingles}</p>}
+                          </div>
+                          <div>
+                            <label htmlFor="nivel_espanhol" className="block text-xs font-medium text-brand-slate mb-1">
+                              {t.cooperado.espanholLabel}
+                            </label>
+                            <Select
+                              id="nivel_espanhol"
+                              options={nivelIdiomaOptions}
+                              value={nivelIdiomaOptions.find(opt => opt.value === formState.nivel_espanhol) || null}
+                              placeholder={t.cooperado.idiomasPlaceholder}
+                              maxMenuHeight={220}
+                              unstyled
+                              onChange={handleSelectChange('nivel_espanhol')}
+                              classNames={getSelectClassNames(errors.nivel_espanhol)}
+                            />
+                            {errors.nivel_espanhol && <p className="text-red-500 text-sm mt-1">{errors.nivel_espanhol}</p>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="linkedin" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <LinkIcon className="h-4 w-4" />
+                          {t.cooperado.linkedinLabel} <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          id="linkedin"
+                          className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue"
+                          placeholder={t.cooperado.linkedinPlaceholder}
+                          value={formState.linkedin || ''}
+                          onChange={handleChange}
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="github" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <Github className="h-4 w-4" />
+                          {t.cooperado.githubLabel} <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          id="github"
+                          className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue"
+                          placeholder={t.cooperado.githubPlaceholder}
+                          value={formState.github || ''}
+                          onChange={handleChange}
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="portfolio" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <LinkIcon className="h-4 w-4" />
+                          {t.cooperado.portfolioLabel} <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          id="portfolio"
+                          className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue"
+                          placeholder={t.cooperado.portfolioPlaceholder}
+                          value={formState.portfolio || ''}
+                          onChange={handleChange}
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="mensagem" className="flex items-center gap-2 text-sm font-medium text-brand-slate mb-2">
+                          <MessageSquare className="h-4 w-4" />
+                          {t.cooperado.mensagemLabel} <span className="text-gray-500 opacity-60 text-xs font-normal">(opcional)</span>
+                        </label>
+                        <textarea
+                          id="mensagem"
+                          rows={4}
+                          className="w-full px-4 py-3 rounded-lg bg-brand-bg border border-brand-slate/20 focus:border-brand-red focus:bg-white focus:ring-2 focus:ring-brand-red/20 transition-all text-brand-blue resize-none"
+                          placeholder={t.cooperado.mensagemPlaceholder}
+                          value={formState.mensagem || ''}
+                          onChange={handleChange}
+                        ></textarea>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex items-center justify-between pt-4 gap-4 border-t border-brand-slate/10">
+                    {step > 0 ? (
+                      <Button type="button" variant="secondary" onClick={handleBack} className="flex items-center gap-2">
+                        <ArrowLeft className="h-4 w-4" /> {t.cooperado.btnBack}
+                      </Button>
+                    ) : (
+                      <span />
+                    )}
+
+                    {step < TOTAL_STEPS - 1 ? (
+                      <Button type="submit" variant="primary" className="flex items-center gap-2" disabled={isValidatingStep}>
+                        {isValidatingStep ? (
+                          <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Validando...</>
+                        ) : (
+                          <>{t.cooperado.btnNext} <ArrowRight className="h-4 w-4" /></>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button type="submit" variant="primary" className="flex items-center gap-2" disabled={isSubmitting}>
+                        {isSubmitting ? (
+                          <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> {t.cooperado.btnSending}</>
+                        ) : (
+                          <>{t.cooperado.btnConfirm} <ArrowRight className="h-4 w-4" /></>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </form>
               </div>
-            </form>
-          </div>
-        </ScrollReveal>
+            </ScrollReveal>
+          </>
+        )}
       </div>
     </div>
   );
